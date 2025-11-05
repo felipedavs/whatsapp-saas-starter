@@ -58,4 +58,3 @@ app.listen(PORT, () => {
   `);
 });
 // Exporta o roteador principal
-export default router;
