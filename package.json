@@ -9,7 +9,7 @@
     "pretty": "pino-pretty -c -t"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.10",
+    "@whiskeysockets/baileys": "6.7.8",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
@@ -18,6 +18,8 @@
     "qrcode": "^1.5.3",
     "uuid": "^9.0.1",
     "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18.x"
   }
 }
-
