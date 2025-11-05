@@ -102,4 +102,3 @@ router.post("/webhook", async (req, res) => {
 });
 
 // 👇 ESSA LINHA É FUNDAMENTAL
-export default router;
