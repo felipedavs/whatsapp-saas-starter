@@ -4,7 +4,6 @@ import pino from "pino";
 
 const sessions = {};
 
-// Criar nova sessão e gerar QR Code
 export async function createSession(sessionId, res) {
   try {
     const sessionPath = `./sessions/${sessionId}`;
@@ -25,10 +24,10 @@ export async function createSession(sessionId, res) {
     sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
-      // ✅ Quando gerar o QR, responde para o ChatFlow imediatamente
+      // ✅ Gera o QR e responde ao ChatFlow AI
       if (qr) {
         console.log(`📲 QR Code gerado para ${sessionId}`);
-        if (!res.headersSent) {
+        if (res && !res.headersSent) {
           res.status(200).json({
             success: true,
             sessionId,
@@ -37,44 +36,48 @@ export async function createSession(sessionId, res) {
         }
       }
 
-      // ✅ Quando conectar com sucesso
+      // ✅ Conectou com sucesso
       if (connection === "open") {
         console.log(`✅ Sessão ${sessionId} conectada com sucesso.`);
       }
 
-      // ⚠️ Quando desconectar
+      // ⚠️ Desconectou
       if (connection === "close") {
-        const reason = lastDisconnect?.error?.output?.statusCode || "desconhecido";
-        console.log(`⚠️ Sessão ${sessionId} desconectada: ${reason}`);
+        const statusCode =
+          lastDisconnect?.error?.output?.statusCode ||
+          lastDisconnect?.error?.output?.payload?.statusCode ||
+          lastDisconnect?.error?.statusCode ||
+          "UNKNOWN";
 
-        // 🔁 Recriar sessão caso não tenha sido logout manual
-        if (reason !== DisconnectReason.loggedOut) {
+        console.log(`⚠️ Sessão ${sessionId} desconectada. Motivo: ${statusCode}`);
+
+        if (statusCode !== DisconnectReason.loggedOut) {
           console.log(`🔄 Tentando reconectar sessão ${sessionId}...`);
-          await createSession(sessionId, { status: () => ({ json: () => {} }) }); // evita travar
+          // Pequeno delay para evitar spam de reconexão
+          setTimeout(() => {
+            createSession(sessionId, { status: () => ({ json: () => {} }) });
+          }, 5000);
         } else {
+          console.log(`🗑️ Sessão ${sessionId} encerrada manualmente.`);
           fs.rmSync(sessionPath, { recursive: true, force: true });
           delete sessions[sessionId];
-          console.log(`🗑️ Sessão ${sessionId} removida.`);
         }
       }
     });
   } catch (err) {
     console.error("❌ Erro ao criar sessão:", err);
-    if (!res.headersSent) res.status(500).json({ error: "Erro ao criar sessão" });
+    if (res && !res.headersSent) res.status(500).json({ error: "Erro ao criar sessão" });
   }
 }
 
-// Retornar sessão ativa
 export function getSession(sessionId) {
   return sessions[sessionId];
 }
 
-// Retornar todas as sessões
 export function getAllSessions() {
   return Object.keys(sessions);
 }
 
-// Deletar uma sessão
 export async function deleteSession(sessionId) {
   const sessionPath = `./sessions/${sessionId}`;
   if (fs.existsSync(sessionPath)) fs.rmSync(sessionPath, { recursive: true, force: true });
