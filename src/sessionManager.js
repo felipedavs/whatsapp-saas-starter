@@ -1,56 +1,63 @@
-import makeWASocket, {
-  useMultiFileAuthState,
-  fetchLatestBaileysVersion,
-  DisconnectReason,
-} from "@whiskeysockets/baileys";
+import makeWASocket, { useMultiFileAuthState, DisconnectReason } from "@whiskeysockets/baileys";
 import qrcode from "qrcode";
-import { instances } from "./instances.js";
+import fs from "fs";
 
+const sessions = {}; // Guardar as conexões ativas
+
+// Criar nova sessão
 export async function createSession(sessionId, res) {
-  try {
-    const { version } = await fetchLatestBaileysVersion();
-    const { state, saveCreds } = await useMultiFileAuthState(`./sessions/${sessionId}`);
+  const sessionPath = `./sessions/${sessionId}`;
+  if (!fs.existsSync("./sessions")) fs.mkdirSync("./sessions");
 
-    const sock = makeWASocket({
-      version,
-      printQRInTerminal: false,
-      auth: state,
-    });
+  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+  const sock = makeWASocket({
+    auth: state,
+    printQRInTerminal: false,
+  });
 
-    // Se gerar um QR Code, enviar para o front em base64
-    sock.ev.on("connection.update", async (update) => {
-      const { connection, lastDisconnect, qr } = update;
+  sock.ev.on("connection.update", async (update) => {
+    const { connection, qr, lastDisconnect } = update;
 
-      if (qr) {
-        const qrImage = await qrcode.toDataURL(qr);
-        res.send({ qr: qrImage });
+    if (qr) {
+      console.log(`🟡 QR Code gerado para ${sessionId}`);
+      const qrImage = await qrcode.toDataURL(qr);
+      res.send({ sessionId, qr: qrImage });
+    }
+
+    if (connection === "open") {
+      console.log(`✅ Sessão ${sessionId} conectada!`);
+      sessions[sessionId] = sock;
+      await saveCreds();
+    } else if (connection === "close") {
+      const reason = lastDisconnect?.error?.output?.statusCode;
+      if (reason === DisconnectReason.loggedOut) {
+        console.log(`❌ Sessão ${sessionId} desconectada.`);
+        delete sessions[sessionId];
+        fs.rmSync(sessionPath, { recursive: true, force: true });
       }
+    }
+  });
 
-      if (connection === "close") {
-        const reason = lastDisconnect?.error?.output?.statusCode;
-        if (reason === DisconnectReason.loggedOut) {
-          console.log(`Sessão ${sessionId} desconectada permanentemente.`);
-          instances.delete(sessionId);
-        } else {
-          console.log(`Sessão ${sessionId} desconectada, tentando reconectar...`);
-          createSession(sessionId, res);
-        }
-      }
-
-      if (connection === "open") {
-        console.log(`✅ Sessão ${sessionId} conectada com sucesso!`);
-        instances.set(sessionId, sock);
-      }
-    });
-
-    sock.ev.on("creds.update", saveCreds);
-  } catch (error) {
-    console.error(`Erro ao criar sessão ${sessionId}:`, error);
-    res.status(500).send({ error: "Erro ao criar sessão" });
-  }
+  sock.ev.on("creds.update", saveCreds);
+  return sock;
 }
 
+// Retornar sessão ativa
 export function getSession(sessionId) {
-  return instances.get(sessionId);
+  return sessions[sessionId];
 }
 
+// Retornar todas as sessões
+export function getAllSessions() {
+  return Object.keys(sessions);
+}
+
+// Deletar uma sessão
+export async function deleteSession(sessionId) {
+  const sessionPath = `./sessions/${sessionId}`;
+  if (fs.existsSync(sessionPath)) fs.rmSync(sessionPath, { recursive: true, force: true });
+
+  delete sessions[sessionId];
+  console.log(`🗑️ Sessão ${sessionId} excluída com sucesso.`);
+  return true;
+}
