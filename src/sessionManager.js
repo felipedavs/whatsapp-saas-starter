@@ -7,7 +7,7 @@ import qrcode from "qrcode-terminal";
 const sessions = {};
 
 // ===============================================================
-// 🚀 LIMPA TODAS AS SESSÕES ANTIGAS AO INICIAR O SERVIDOR
+// 🧹 LIMPA SESSÕES ANTIGAS AO INICIAR
 // ===============================================================
 (() => {
   const baseDir = "./sessions";
@@ -19,13 +19,13 @@ const sessions = {};
 })();
 
 // ===============================================================
-// 🧠 Criar nova sessão WhatsApp
+// 🧠 CRIAR NOVA SESSÃO
 // ===============================================================
 export async function createSession(sessionId, res) {
   try {
     console.log(`🚀 Criando nova sessão: ${sessionId}`);
-
     const sessionPath = `./sessions/${sessionId}`;
+
     if (fs.existsSync(sessionPath)) {
       console.log(`🧹 Limpando sessão antiga: ${sessionId}`);
       fs.rmSync(sessionPath, { recursive: true, force: true });
@@ -36,7 +36,6 @@ export async function createSession(sessionId, res) {
 
     const sock = makeWASocket({
       auth: state,
-      printQRInTerminal: true, // 👈 ativa impressão do QR direto no Render
       logger: pino({ level: "silent" }),
       browser: ["Base44 SaaS", "Chrome", "10.0"],
       syncFullHistory: false,
@@ -46,14 +45,14 @@ export async function createSession(sessionId, res) {
     sock.ev.on("creds.update", saveCreds);
 
     // ===========================================================
-    // 🔄 Atualizações de conexão
+    // 🧭 ATUALIZAÇÕES DE CONEXÃO
     // ===========================================================
     sock.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        console.log(`📲 QR gerado para ${sessionId}:`);
-        qrcode.generate(qr, { small: true }); // mostra QR no log
+        console.log(`📲 QR Code gerado para ${sessionId}:`);
+        qrcode.generate(qr, { small: true }); // ✅ imprime o QR manualmente
         if (res && !res.headersSent) res.status(200).send({ sessionId, qr });
       }
 
@@ -69,10 +68,10 @@ export async function createSession(sessionId, res) {
           console.log(`🧹 Sessão ${sessionId} corrompida — limpando e recriando...`);
           fs.rmSync(sessionPath, { recursive: true, force: true });
           delete sessions[sessionId];
-          setTimeout(() => createSession(sessionId), 8000);
+          setTimeout(() => createSession(sessionId), 10000);
         } else {
           console.log(`🔄 Tentando reconectar sessão ${sessionId}...`);
-          setTimeout(() => createSession(sessionId), 8000);
+          setTimeout(() => createSession(sessionId), 10000);
         }
       }
     });
@@ -83,22 +82,12 @@ export async function createSession(sessionId, res) {
 }
 
 // ===============================================================
-// 🔍 Retornar sessão ativa
+// 🔍 GET SESSION / DELETE
 // ===============================================================
 export function getSession(sessionId) {
   return sessions[sessionId];
 }
 
-// ===============================================================
-// 📋 Listar todas as sessões
-// ===============================================================
-export function getAllSessions() {
-  return Object.keys(sessions);
-}
-
-// ===============================================================
-// 🗑️ Deletar sessão manualmente
-// ===============================================================
 export async function deleteSession(sessionId) {
   const sessionPath = `./sessions/${sessionId}`;
   if (fs.existsSync(sessionPath)) fs.rmSync(sessionPath, { recursive: true, force: true });
@@ -108,7 +97,7 @@ export async function deleteSession(sessionId) {
 }
 
 // ===============================================================
-// ⚙️ PATCH DE ESTABILIDADE — Render / ChatFlow
+// ⚙️ PATCH KEEP-ALIVE
 // ===============================================================
 setInterval(() => {
   const activeSessions = Object.keys(sessions);
@@ -127,10 +116,10 @@ setInterval(() => {
   });
 }, 1000 * 60 * 5);
 
-console.log("✅ Patch de estabilidade com QR direto no log carregado com sucesso.");
+console.log("✅ Patch de estabilidade com QR manual carregado.");
 
 // ===============================================================
-// 👇 AUTOCRIAÇÃO DE SESSÃO (para debug)
+// 🚀 AUTO-INICIALIZAÇÃO
 // ===============================================================
 setTimeout(() => {
   console.log("🧠 Criando sessão automática de debug: empresa123");
