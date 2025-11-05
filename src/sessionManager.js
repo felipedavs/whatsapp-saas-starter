@@ -19,4 +19,3 @@ export async function deleteSession(sessionId) {
 }
 
 // Exportar funções principais (SEM duplicar)
-export { createSession, getSession };
