@@ -22,34 +22,45 @@ export async function createSession(sessionId, res) {
 
     sock.ev.on("creds.update", saveCreds);
 
-    sock.ev.on("connection.update", (update) => {
+    sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
+      // ✅ Quando gerar o QR, responde para o ChatFlow imediatamente
       if (qr) {
         console.log(`📲 QR Code gerado para ${sessionId}`);
-        res.status(200).send({ sessionId, qr });
+        if (!res.headersSent) {
+          res.status(200).json({
+            success: true,
+            sessionId,
+            qr,
+          });
+        }
       }
 
+      // ✅ Quando conectar com sucesso
       if (connection === "open") {
         console.log(`✅ Sessão ${sessionId} conectada com sucesso.`);
       }
 
+      // ⚠️ Quando desconectar
       if (connection === "close") {
-        const reason = lastDisconnect?.error?.output?.statusCode;
+        const reason = lastDisconnect?.error?.output?.statusCode || "desconhecido";
         console.log(`⚠️ Sessão ${sessionId} desconectada: ${reason}`);
 
+        // 🔁 Recriar sessão caso não tenha sido logout manual
         if (reason !== DisconnectReason.loggedOut) {
           console.log(`🔄 Tentando reconectar sessão ${sessionId}...`);
-          createSession(sessionId, res);
+          await createSession(sessionId, { status: () => ({ json: () => {} }) }); // evita travar
         } else {
           fs.rmSync(sessionPath, { recursive: true, force: true });
           delete sessions[sessionId];
+          console.log(`🗑️ Sessão ${sessionId} removida.`);
         }
       }
     });
   } catch (err) {
     console.error("❌ Erro ao criar sessão:", err);
-    res.status(500).send({ error: "Erro ao criar sessão" });
+    if (!res.headersSent) res.status(500).json({ error: "Erro ao criar sessão" });
   }
 }
 
@@ -72,5 +83,3 @@ export async function deleteSession(sessionId) {
   console.log(`🗑️ Sessão ${sessionId} excluída com sucesso.`);
   return true;
 }
-
-// Exportar funções principais
