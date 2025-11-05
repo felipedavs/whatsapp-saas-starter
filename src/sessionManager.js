@@ -74,4 +74,3 @@ export async function deleteSession(sessionId) {
 }
 
 // Exportar funções principais
-export { createSession };
