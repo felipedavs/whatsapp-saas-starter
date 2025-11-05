@@ -1,35 +1,32 @@
-import 'dotenv/config'
-import express from 'express'
-import cors from 'cors'
-import pino from 'pino'
-import { WebSocketServer } from 'ws'
-import { instancesRouter } from './routes/instances.js'
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import instancesRouter from "./routes/instances.js";
 
-const app = express()
-const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
-app.set('logger', logger)
+// Carrega variáveis de ambiente (.env)
+dotenv.config();
 
-app.use(cors())
-app.use(express.json({ limit: '1mb' }))
+const app = express();
+const PORT = process.env.PORT || 10000;
 
-// health
-app.get('/health', (_req,res)=> res.json({ ok: true }))
+// Middlewares básicos
+app.use(cors());
+app.use(express.json());
 
-// routes
-app.use('/api/instances', instancesRouter)
+// Rota de teste
+app.get("/", (req, res) => {
+  res.send("✅ Servidor WhatsApp SaaS Starter está rodando!");
+});
 
-// Static serve QR snapshots if needed
-app.use('/static', express.static('sessions'))
+// Rotas principais (instâncias de conexão WhatsApp)
+app.use("/instances", instancesRouter);
 
-const port = process.env.PORT || 5173
-const server = app.listen(port, ()=> logger.info(`HTTP listening on :${port}`))
+// Healthcheck (usado pelo Render)
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
 
-// WebSocket for real-time QR & status push
-const wss = new WebSocketServer({ server, path: '/ws' })
-wss.on('connection', (socket, req) => {
-  logger.info({ ip: req.socket.remoteAddress }, 'WebSocket connected')
-  socket.on('close', ()=> logger.info('WebSocket disconnected'))
-})
-
-// Expose wss on app locals so routes can broadcast
-app.set('wss', wss)
+// Inicialização do servidor
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
