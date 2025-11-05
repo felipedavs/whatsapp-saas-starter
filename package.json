@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node src/server.js",
-    "start": "NODE_ENV=production node src/server.js",
+    "dev": "node server.js",
+    "start": "NODE_ENV=production node server.js",
     "pretty": "pino-pretty -c -t"
   },
   "dependencies": {
