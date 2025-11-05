@@ -2,6 +2,7 @@ import makeWASocket, { useMultiFileAuthState, DisconnectReason } from "@whiskeys
 import fs from "fs";
 import pino from "pino";
 import https from "https";
+import qrcode from "qrcode-terminal";
 
 const sessions = {};
 
@@ -35,7 +36,7 @@ export async function createSession(sessionId, res) {
 
     const sock = makeWASocket({
       auth: state,
-      printQRInTerminal: false,
+      printQRInTerminal: true, // 👈 ativa impressão do QR direto no Render
       logger: pino({ level: "silent" }),
       browser: ["Base44 SaaS", "Chrome", "10.0"],
       syncFullHistory: false,
@@ -44,12 +45,16 @@ export async function createSession(sessionId, res) {
     sessions[sessionId] = sock;
     sock.ev.on("creds.update", saveCreds);
 
+    // ===========================================================
+    // 🔄 Atualizações de conexão
+    // ===========================================================
     sock.ev.on("connection.update", (update) => {
       const { connection, lastDisconnect, qr } = update;
 
-      if (qr && res && !res.headersSent) {
-        console.log(`📲 QR Code gerado para ${sessionId}`);
-        res.status(200).send({ sessionId, qr });
+      if (qr) {
+        console.log(`📲 QR gerado para ${sessionId}:`);
+        qrcode.generate(qr, { small: true }); // mostra QR no log
+        if (res && !res.headersSent) res.status(200).send({ sessionId, qr });
       }
 
       if (connection === "open") {
@@ -64,10 +69,10 @@ export async function createSession(sessionId, res) {
           console.log(`🧹 Sessão ${sessionId} corrompida — limpando e recriando...`);
           fs.rmSync(sessionPath, { recursive: true, force: true });
           delete sessions[sessionId];
-          setTimeout(() => createSession(sessionId), 7000);
+          setTimeout(() => createSession(sessionId), 8000);
         } else {
           console.log(`🔄 Tentando reconectar sessão ${sessionId}...`);
-          setTimeout(() => createSession(sessionId), 7000);
+          setTimeout(() => createSession(sessionId), 8000);
         }
       }
     });
@@ -93,4 +98,41 @@ export function getAllSessions() {
 
 // ===============================================================
 // 🗑️ Deletar sessão manualmente
-// ================================================
+// ===============================================================
+export async function deleteSession(sessionId) {
+  const sessionPath = `./sessions/${sessionId}`;
+  if (fs.existsSync(sessionPath)) fs.rmSync(sessionPath, { recursive: true, force: true });
+  delete sessions[sessionId];
+  console.log(`🗑️ Sessão ${sessionId} excluída com sucesso.`);
+  return true;
+}
+
+// ===============================================================
+// ⚙️ PATCH DE ESTABILIDADE — Render / ChatFlow
+// ===============================================================
+setInterval(() => {
+  const activeSessions = Object.keys(sessions);
+  if (activeSessions.length > 0) {
+    console.log(`🟢 Sessões ativas: ${activeSessions.join(", ")}`);
+  } else {
+    console.log("💤 Nenhuma sessão ativa no momento. Mantendo servidor acordado...");
+  }
+}, 1000 * 60 * 4);
+
+setInterval(() => {
+  https.get("https://whatsapp-saas-starter.onrender.com/health", (res) => {
+    if (res.statusCode === 200) console.log("🌐 Keep-alive ativo — Render acordado!");
+  }).on("error", (err) => {
+    console.error("⚠️ Falha no keep-alive:", err.message);
+  });
+}, 1000 * 60 * 5);
+
+console.log("✅ Patch de estabilidade com QR direto no log carregado com sucesso.");
+
+// ===============================================================
+// 👇 AUTOCRIAÇÃO DE SESSÃO (para debug)
+// ===============================================================
+setTimeout(() => {
+  console.log("🧠 Criando sessão automática de debug: empresa123");
+  createSession("empresa123");
+}, 8000);
