@@ -1,0 +1,22 @@
+{
+  "name": "whatsapp-saas-starter",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "NODE_ENV=production node src/server.js",
+    "pretty": "pino-pretty -c -t"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.10",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pino": "^9.3.2",
+    "pino-pretty": "^11.2.2",
+    "qrcode": "^1.5.3",
+    "uuid": "^9.0.1",
+    "ws": "^8.18.0"
+  }
+}
