@@ -1,108 +1,50 @@
-import express from 'express'
-import { v4 as uuidv4 } from 'uuid'
-import QRCode from 'qrcode'
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
-import { SessionManager } from '../sessionManager.js'
+import express from "express";
+import { v4 as uuidv4 } from "uuid";
+import qrcode from "qrcode";
+import { startSession, getSession, closeSession } from "../sessionManager.js";
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+const router = express.Router();
 
-export const instancesRouter = express.Router()
-
-const sessionsDir = path.join(__dirname, '..', '..', 'sessions')
-if (!fs.existsSync(sessionsDir)) fs.mkdirSync(sessionsDir, { recursive: true })
-
-const manager = new SessionManager(sessionsDir)
-
-/**
- * Create a new instance (but do not start connection yet)
- */
-instancesRouter.post('/', async (req, res) => {
-  const { name } = req.body || {}
-  const id = uuidv4()
-  await manager.createInstance(id, { name: name || `Instance ${id.slice(0,6)}` })
-  res.status(201).json({ id })
-})
-
-/**
- * Start connection (will emit QR if not authenticated)
- */
-instancesRouter.post('/:id/start', async (req, res) => {
-  const { id } = req.params
-  const started = await manager.start(id, req.app)
-  if (!started) return res.status(404).json({ error: 'Instance not found' })
-  res.json({ ok: true })
-})
-
-/**
- * Get list of instances with status
- */
-instancesRouter.get('/', (_req, res) => {
-  const list = manager.list().map(i => ({
-    id: i.id, name: i.meta.name, status: i.status, createdAt: i.createdAt, webhook: i.meta.webhook || null
-  }))
-  res.json(list)
-})
-
-/**
- * Get a single instance
- */
-instancesRouter.get('/:id', (req, res) => {
-  const { id } = req.params
-  const inst = manager.get(id)
-  if (!inst) return res.status(404).json({ error: 'Not found' })
-  res.json({
-    id: inst.id, name: inst.meta.name, status: inst.status, createdAt: inst.createdAt, webhook: inst.meta.webhook || null
-  })
-})
-
-/**
- * Set/Update webhook URL to forward incoming messages
- */
-instancesRouter.put('/:id/webhook', async (req, res) => {
-  const { id } = req.params
-  const { url } = req.body || {}
-  if (!url) return res.status(400).json({ error: 'url is required' })
-  const ok = await manager.updateMeta(id, { webhook: url })
-  if (!ok) return res.status(404).json({ error: 'Instance not found' })
-  res.json({ ok: true })
-})
-
-/**
- * Get current QR (as dataURL). Also broadcasted via WebSocket.
- */
-instancesRouter.get('/:id/qr', async (req, res) => {
-  const { id } = req.params
-  const inst = manager.get(id)
-  if (!inst) return res.status(404).json({ error: 'Not found' })
-  if (!inst.qr) return res.status(204).send() // no content (already authenticated or not ready)
-  const dataURL = await QRCode.toDataURL(inst.qr)
-  res.json({ qr: dataURL, ts: Date.now() })
-})
-
-/**
- * Send a text message
- */
-instancesRouter.post('/:id/sendMessage', async (req, res) => {
-  const { id } = req.params
-  const { to, text } = req.body || {}
-  if (!to || !text) return res.status(400).json({ error: 'to and text are required' })
+// Iniciar uma nova sessão (gera QR Code)
+router.post("/start", async (req, res) => {
   try {
-    const result = await manager.sendText(id, to, text)
-    res.json({ ok: true, result })
-  } catch (e) {
-    res.status(400).json({ error: e.message })
-  }
-})
+    const sessionId = uuidv4();
+    const session = await startSession(sessionId);
 
-/**
- * Delete an instance (and its auth files)
- */
-instancesRouter.delete('/:id', async (req, res) => {
-  const { id } = req.params
-  const ok = await manager.remove(id)
-  if (!ok) return res.status(404).json({ error: 'Not found' })
-  res.json({ ok: true })
-})
+    if (session.qr) {
+      const qr = await qrcode.toDataURL(session.qr);
+      return res.json({ sessionId, qr });
+    }
+
+    return res.status(400).json({ error: "QR Code não disponível no momento." });
+  } catch (error) {
+    console.error("Erro ao iniciar sessão:", error);
+    return res.status(500).json({ error: "Falha ao iniciar sessão." });
+  }
+});
+
+// Consultar status da sessão
+router.get("/:id/status", async (req, res) => {
+  const session = getSession(req.params.id);
+  if (!session) {
+    return res.status(404).json({ error: "Sessão não encontrada." });
+  }
+
+  res.json({
+    id: req.params.id,
+    connected: session.connected || false,
+  });
+});
+
+// Encerrar sessão
+router.delete("/:id", async (req, res) => {
+  try {
+    await closeSession(req.params.id);
+    res.json({ message: "Sessão encerrada com sucesso." });
+  } catch (error) {
+    console.error("Erro ao encerrar sessão:", error);
+    res.status(500).json({ error: "Falha ao encerrar sessão." });
+  }
+});
+
+export default router;
